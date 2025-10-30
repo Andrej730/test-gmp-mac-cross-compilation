@@ -1,0 +1,78 @@
+name: Test GMP Cross Compilation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup build environment
+      run: |
+        export BUILD_ROOT=`pwd`
+        echo "BUILD_ROOT=$BUILD_ROOT" >> $GITHUB_ENV
+        mkdir -p deps/arm64 deps/x86_64
+        export CFLAGS="-mmacosx-version-min=10.15"
+        echo "CFLAGS=$CFLAGS" >> $GITHUB_ENV
+
+    - name: Extract GMP
+      run: tar -xf gmp-6.3.0.tar.bz2
+
+    - name: Build GMP for arm64
+      run: |
+        cd gmp-6.3.0
+        mkdir build && cd build
+        ../configure --enable-static --disable-shared --with-pic --prefix="$BUILD_ROOT/deps/arm64/gmp-6.3.0"
+        make -j10
+        make install
+
+    - name: Build GMP for x86_64
+      run: |
+        cd gmp-6.3.0/build
+        rm -rf ./*
+        CC="clang -arch x86_64" ../configure --enable-static --disable-shared --with-pic --host=x86_64-apple-darwin --prefix="$BUILD_ROOT/deps/x86_64/gmp-6.3.0"
+        make -j10
+        make install
+
+    - name: Create build directory
+      run: |
+        cd test-gmp-mac-cross-compilation
+        mkdir -p build
+
+    - name: Build module for arm64 (without LDFLAGS)
+      run: |
+        # Works OK.
+        cd test-gmp-mac-cross-compilation/build
+        rm -rf ./*
+        cmake .. -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64
+        ninja -v
+
+    - name: Build module for arm64 (with LDFLAGS)
+      run: |
+        # Works OK.
+        cd test-gmp-mac-cross-compilation/build
+        export LDFLAGS="-Wl,-flat_namespace"
+        rm -rf ./*
+        cmake .. -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64
+        ninja -v
+
+    - name: Build module for x86_64 (without LDFLAGS)
+      run: |
+        # Works OK.
+        cd test-gmp-mac-cross-compilation/build
+        unset LDFLAGS
+        rm -rf ./*
+        cmake .. -G Ninja -DCMAKE_OSX_ARCHITECTURES=x86_64
+        ninja -v
+
+    - name: Build module for x86_64 (with LDFLAGS)
+      run: |
+        # BREAKS.
+        cd test-gmp-mac-cross-compilation/build
+        export LDFLAGS="-Wl,-flat_namespace"
+        rm -rf ./*
+        cmake .. -G Ninja -DCMAKE_OSX_ARCHITECTURES=x86_64
+        ninja -v
